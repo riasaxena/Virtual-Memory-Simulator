@@ -20,20 +20,6 @@ void parseline (char prompt[100], char* argv[3]) {
         i++;
     }
 }
-void loop() {
-    char input[100];
-    char* args[3];
-    do {
-        printf("> ");
-        fgets(input, 80, stdin);
-        input[strlen(input)-1] = '\0';
-        parseline(input, args);
-        if (strcmp(args[0], "quit") == 0){
-            exit(0);
-        }
-        //execute(args);
-    } while (1);
-}
 
 //memory struct
 
@@ -67,14 +53,38 @@ void init() {
         p_table[i].time_stamp = 0;
     }
 }
+void print_ptable(){
+    int i; 
+    for (i = 0; i < sizeof(p_table)/sizeof(p_table[0]); i++) {
+        printf("%d:%d:%d:%d\n", p_table[i].v_page_num,  p_table[i].valid_bit,  p_table[i].dirty_bit, p_table[i].page_num); 
+    }
+}
+void loop() {
+    char input[100];
+    char* args[3];
+    do {
+        printf("> ");
+        fgets(input, 80, stdin);
+        input[strlen(input)-1] = '\0';
+        parseline(input, args);
+        if (strcmp(args[0], "quit") == 0){
+            exit(0);
+        }
+        else if (strcmp(args[0], "showptable") == 0){
+            print_ptable();
+        }
+    } while (1);
+}
 
 
 int main(int argc, char** argv) {
-    init();
+    
     if (argv[1] == NULL || strcmp (argv[1], "FIFO") == 0)
         fifo = 1;
     else if (strcmp (argv[1], "LRU") == 0)
         lru = 1;
+    init();
     loop();
+
     return 0;
 }
