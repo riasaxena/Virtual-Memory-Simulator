@@ -10,7 +10,6 @@
 #include <fcntl.h>
 #include <string.h>
 int fifo = 0, lru = 0;
-int least_recent[] = {0, 0, 0, 0}; 
 int next_main_mem = 0; 
 void parseline (char prompt[100], char* argv[3]) {
 
@@ -67,7 +66,13 @@ void print_ptable(){
 int return_page_num(){
     next_main_mem ++; 
     if (next_main_mem > 4){
-       //here is where you should handle lru and fifo 
+       if (lru == 1){
+
+       }
+       else {
+
+           return (next_main_mem-1)%4;
+       }
     }
     return next_main_mem - 1; 
 }
@@ -80,7 +85,6 @@ void read_f (int address ) {
     if (p_table[address/8].valid_bit == 0){
         printf("A Page Fault Has Occurred\n");
         int pn = return_page_num(); 
-        least_recent[pn] = next_main_mem;
         p_table[address/8].valid_bit = 1;
         p_table[address/8].page_num = pn;
         int i; 
@@ -89,6 +93,25 @@ void read_f (int address ) {
         }
     }
     printf("%i\n" , virtual_memory[address].data); 
+}
+void write_f (int address, int data){
+    if (p_table[address/8].valid_bit == 0){
+        printf("A Page Fault Has Occurred\n");
+        int pn = return_page_num(); 
+        p_table[address/8].valid_bit = 1;
+        p_table[address/8].dirty_bit = 1;
+        p_table[address/8].page_num = pn;
+        int i; 
+        virtual_memory[address].data = data; 
+        for (i = 0; i < 8; i++){
+            main_memory[(pn*8)+i].data = virtual_memory[((address/8)*8) + i].data;
+        }
+    }
+    else{
+        int pn = p_table[address/8].page_num; 
+        virtual_memory[address].data = data; 
+        main_memory[(pn*8)+(address%8)].data = data; 
+    }
 }
 
 // showmain <ppn>: This command prints the contents of a physical page in the main memory. The
@@ -120,6 +143,9 @@ void loop() {
         }
         else if (strcmp(args[0], "read") == 0){
             read_f(atoi(args[1]));
+        }
+         else if (strcmp(args[0], "write") == 0){
+            write_f(atoi(args[1]), atoi(args[2]));
         }
         else if (strcmp(args[0], "showmain") == 0){
             showmain(atoi(args[1]));
