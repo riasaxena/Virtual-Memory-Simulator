@@ -12,6 +12,7 @@
 int fifo = 0, lru = 0;
 int least_recent[] = {0, 0, 0, 0}; 
 int next_main_mem = 0; 
+int clock = 0;
 void parseline (char prompt[100], char* argv[3]) {
 
     char * str = strtok(prompt, " ");
@@ -24,7 +25,6 @@ void parseline (char prompt[100], char* argv[3]) {
 }
 
 //memory struct
-
 struct Memory {
     int address, data;
 };
@@ -34,9 +34,11 @@ struct PageTable {
     int v_page_num, valid_bit, dirty_bit, page_num, time_stamp;
 };
 
+//each page contains 8 addresses
+//main memory has 4 pages
 struct Memory main_memory[32];
+//virtual memory system will have 16 pages;
 struct Memory virtual_memory[128];
-//virtual memory system will have 16 pages; each page contains 8 addresses
 struct PageTable p_table[16];
 
 void init() {
@@ -62,12 +64,31 @@ void print_ptable(){
         printf("%d:%d:%d:%d\n", p_table[i].v_page_num,  p_table[i].valid_bit,  p_table[i].dirty_bit, p_table[i].page_num); 
     }
 }
-// this function will handle the lru and fifo by returning the value in main memory that should be accessed
 
+// this function will handle the lru and fifo by returning the value in main memory that should be accessed
 int return_page_num(){
+    int pageNum;
     next_main_mem ++; 
+    //if page fault occurs
     if (next_main_mem > 4){
-       //here is where you should handle lru and fifo 
+        //FIFO
+        if (fifo == 1) {
+            //return page number of the page that has been the longest in the main memory
+            pageNum = least_recent[0];
+            // handling changing the ptable when page is no longer in main memory
+            p_table[pageNum/8].valid_bit = 0;
+            p_table[pageNum/8].dirty_bit = 0;
+            return pageNum;
+        }
+        //LRU - use global clock
+        else if (lru == 1) {
+            //return page number of the page that is the least recently used/accessed in the main memory
+            pageNum = clock;
+            // handling changing the ptable when page is no longer in main memory
+            p_table[pageNum/8].valid_bit = 0;
+            p_table[pageNum/8].dirty_bit = 0;
+            return pageNum;
+        }
     }
     return next_main_mem - 1; 
 }
@@ -76,6 +97,8 @@ int return_page_num(){
 // occurs, “A Page Fault Has Occurred\n” is printed to the screen before the contents of a memory
 // address.
 void read_f (int address ) {
+    // every time write is called, update clock to be the address most recently accessed
+    clock = p_table[address/8].page_num;
     //read the address of the memory address parameter
     if (p_table[address/8].valid_bit == 0){
         printf("A Page Fault Has Occurred\n");
@@ -90,6 +113,31 @@ void read_f (int address ) {
 
     }
     printf("%i\n" , virtual_memory[address].data); 
+}
+
+// The command writes data to a memory location. The command
+// takes two arguments, the virtual address to write the data to, and an integer which will be written to
+// the address. When a page fault occurs, “A Page Fault Has Occurred\n” is printed on the screen.
+void write_f (int address, int data){
+    //every time write is called, update clock to be the address most recently accessed
+    clock = p_table[address/8].page_num;
+    if (p_table[address/8].valid_bit == 0){
+        printf("A Page Fault Has Occurred\n");
+        int pn = return_page_num(); 
+        p_table[address/8].valid_bit = 1;
+        p_table[address/8].dirty_bit = 1;
+        p_table[address/8].page_num = pn;
+        int i; 
+        virtual_memory[address].data = data; 
+        for (i = 0; i < 8; i++){
+            main_memory[(pn*8)+i].data = virtual_memory[((address/8)*8) + i].data;
+        }
+    }
+    else{
+        int pn = p_table[address/8].page_num; 
+        virtual_memory[address].data = data; 
+        main_memory[(pn*8)+(address%8)].data = data; 
+    }
 }
 
 // showmain <ppn>: This command prints the contents of a physical page in the main memory. The
