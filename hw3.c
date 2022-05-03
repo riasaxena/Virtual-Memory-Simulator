@@ -88,6 +88,7 @@ void read (struct Memory virtual_address) {
             //print the virtual address
             prinf(virtual_address);
         }
+
     }
     //if the address does not exist on any page, print an error message
     printf("A Page Fault Has Occurred\n");
