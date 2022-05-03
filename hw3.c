@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <string.h>
 int fifo = 0, lru = 0;
+int least_recent[] = {0, 0, 0, 0}; 
+int next_main_mem = 0; 
 void parseline (char prompt[100], char* argv[3]) {
 
     char * str = strtok(prompt, " ");
@@ -19,20 +21,6 @@ void parseline (char prompt[100], char* argv[3]) {
         str = strtok(NULL, " ");
         i++;
     }
-}
-void loop() {
-    char input[100];
-    char* args[3];
-    do {
-        printf("> ");
-        fgets(input, 80, stdin);
-        input[strlen(input)-1] = '\0';
-        parseline(input, args);
-        if (strcmp(args[0], "quit") == 0){
-            exit(0);
-        }
-        //execute(args);
-    } while (1);
 }
 
 //memory struct
@@ -68,30 +56,40 @@ void init() {
         p_table[i].time_stamp = 0;
     }
 }
+void print_ptable(){
+    int i; 
+    for (i = 0; i < sizeof(p_table)/sizeof(p_table[0]); i++) {
+        printf("%d:%d:%d:%d\n", p_table[i].v_page_num,  p_table[i].valid_bit,  p_table[i].dirty_bit, p_table[i].page_num); 
+    }
+}
+// this function will handle the lru and fifo by returning the value in main memory that should be accessed
 
+int return_page_num(){
+    next_main_mem ++; 
+    if (next_main_mem > 4){
+       //here is where you should handle lru and fifo 
+    }
+    return next_main_mem - 1; 
+}
 // read <virtual_addr>: This command prints the contents of a memory address. The command
 // takes one argument which is the virtual address of the memory location to be read. When a page fault
 // occurs, “A Page Fault Has Occurred\n” is printed to the screen before the contents of a memory
 // address.
-
-void read (struct Memory virtual_address) {
+void read_f (int address ) {
     //read the address of the memory address parameter
-    int page; 
-    int v_address;
-
-    //look through each page in the page table
-    for (page; page < sizeof(p_table); page++) {
-        //if virtual address exists in page
-        for (v_address; sizeof(virtual_memory); v_address++){
-            //TODO: look through each address in virtual memory 
-            // if (virtual_address.address == &p_table[page]) {
-            //print the virtual address
-            prinf(virtual_address);
+    if (p_table[address/8].valid_bit == 0){
+        printf("A Page Fault Has Occurred\n");
+        int pn = return_page_num(); 
+        least_recent[pn] = next_main_mem;
+        p_table[address/8].valid_bit = 1;
+        p_table[address/8].page_num = pn;
+        int i; 
+        for (i = 0; i < 8; i++){
+            main_memory[(pn*8)+i].data = virtual_memory[((address/8)*8) + i].data;
         }
 
     }
-    //if the address does not exist on any page, print an error message
-    printf("A Page Fault Has Occurred\n");
+    printf("%i\n" , virtual_memory[address].data); 
 }
 
 // showmain <ppn>: This command prints the contents of a physical page in the main memory. The
@@ -102,15 +100,44 @@ void read (struct Memory virtual_address) {
 // value 102 at address 10, and so on.
 
 void showmain (int ppn) {
-
+    int i;
+    for(i = (ppn*8); i < (ppn*8) + 8; i++){
+        printf("%i:%i\n", main_memory[i].address, main_memory[i].data); 
+    }
+}
+void loop() {
+    char input[100];
+    char* args[3];
+    do {
+        printf("> ");
+        fgets(input, 80, stdin);
+        input[strlen(input)-1] = '\0';
+        parseline(input, args);
+        if (strcmp(args[0], "quit") == 0){
+            exit(0);
+        }
+        else if (strcmp(args[0], "showptable") == 0){
+            print_ptable();
+        }
+        else if (strcmp(args[0], "read") == 0){
+            read_f(atoi(args[1]));
+        }
+        else if (strcmp(args[0], "showmain") == 0){
+            showmain(atoi(args[1]));
+        }
+    } while (1);
 }
 
+
+
 int main(int argc, char** argv) {
-    init();
+    printf("TODO: \n - return_page_num function which handles lru and fifo \n - handling changing the ptable when page is no longer in main memory\n");
     if (argv[1] == NULL || strcmp (argv[1], "FIFO") == 0)
         fifo = 1;
     else if (strcmp (argv[1], "LRU") == 0)
         lru = 1;
+    init();
     loop();
+
     return 0;
 }
