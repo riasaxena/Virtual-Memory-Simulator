@@ -9,10 +9,11 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <string.h>
+#include <math.h>
 int fifo = 0, lru = 0;
 int least_recent[] = {0, 0, 0, 0}; 
-int next_main_mem = 0; 
-int clock = 0;
+int next_main_mem = -1; 
+int clock = 1;
 void parseline (char prompt[100], char* argv[3]) {
 
     char * str = strtok(prompt, " ");
@@ -61,36 +62,64 @@ void init() {
 void print_ptable(){
     int i; 
     for (i = 0; i < sizeof(p_table)/sizeof(p_table[0]); i++) {
-        printf("%d:%d:%d:%d\n", p_table[i].v_page_num,  p_table[i].valid_bit,  p_table[i].dirty_bit, p_table[i].page_num); 
+        printf("%d:%d:%d:%d:%d\n", p_table[i].v_page_num,  p_table[i].valid_bit,  p_table[i].dirty_bit, p_table[i].page_num, p_table[i].time_stamp); 
     }
 }
-
+int fifo_func(){
+    int page_to_write_to = next_main_mem%4; 
+    int i;
+    for (i = 0; i < sizeof(p_table)/sizeof(p_table[0]); i++) {
+        if (p_table[i].valid_bit == 1 && p_table[i].page_num == page_to_write_to){
+            p_table[i].valid_bit = 0;
+            p_table[i].dirty_bit = 0;
+        }
+    }
+    //printf("fifo: %i\n", page_to_write_to); 
+    return page_to_write_to;
+}
+int lru_func(){
+    int i; 
+    int reset_page; 
+    double min_clock_val = INFINITY; 
+    int page_to_write_to; 
+    for (i = 0; i < sizeof(p_table)/sizeof(p_table[0]); i++) {
+        if (p_table[i].valid_bit == 1){
+            
+            if (min_clock_val > p_table[i].time_stamp){
+                //printf("time stamp: %i,  v_page_num: %i, main_mem:%i\n",p_table[i].time_stamp ,p_table[i].v_page_num, p_table[i].page_num);
+                min_clock_val = p_table[i].time_stamp; 
+                reset_page = p_table[i].v_page_num;
+                page_to_write_to = p_table[i].page_num; 
+                // printf("%i, %i, %i", min_clock_val, reset_page, page_to_write_to); 
+            }
+        }
+    }
+    //printf("FINAL: time stamp: %i,  v_page_num: %i, main_mem:%i\n",min_clock_val, reset_page,page_to_write_to);
+    p_table[reset_page].valid_bit = 0;
+    p_table[reset_page].dirty_bit = 0;
+    //printf("lru: %i\n", page_to_write_to); 
+    return page_to_write_to; 
+    
+}
 // this function will handle the lru and fifo by returning the value in main memory that should be accessed
 int return_page_num(){
     int pageNum;
     next_main_mem ++; 
     //if page fault occurs
-    if (next_main_mem > 4){
+    if (next_main_mem > 3){
         //FIFO
         if (fifo == 1) {
-            //return page number of the page that has been the longest in the main memory
-            pageNum = least_recent[0];
-            // handling changing the ptable when page is no longer in main memory
-            p_table[pageNum/8].valid_bit = 0;
-            p_table[pageNum/8].dirty_bit = 0;
-            return pageNum;
+            
+            return fifo_func(); 
         }
         //LRU - use global clock
         else if (lru == 1) {
             //return page number of the page that is the least recently used/accessed in the main memory
-            pageNum = clock;
-            // handling changing the ptable when page is no longer in main memory
-            p_table[pageNum/8].valid_bit = 0;
-            p_table[pageNum/8].dirty_bit = 0;
-            return pageNum;
+            return lru_func(); 
         }
     }
-    return next_main_mem - 1; 
+    //printf("pn: %i\n", next_main_mem); 
+    return next_main_mem; 
 }
 // read <virtual_addr>: This command prints the contents of a memory address. The command
 // takes one argument which is the virtual address of the memory location to be read. When a page fault
@@ -98,20 +127,20 @@ int return_page_num(){
 // address.
 void read_f (int address ) {
     // every time write is called, update clock to be the address most recently accessed
-    clock = p_table[address/8].page_num;
+    p_table[address/8].time_stamp = clock;  
     //read the address of the memory address parameter
     if (p_table[address/8].valid_bit == 0){
         printf("A Page Fault Has Occurred\n");
         int pn = return_page_num(); 
-        least_recent[pn] = next_main_mem;
         p_table[address/8].valid_bit = 1;
         p_table[address/8].page_num = pn;
         int i; 
         for (i = 0; i < 8; i++){
             main_memory[(pn*8)+i].data = virtual_memory[((address/8)*8) + i].data;
         }
-
+       //printf("pn: %i\n", pn); 
     }
+    clock ++; 
     printf("%i\n" , virtual_memory[address].data); 
 }
 
@@ -120,7 +149,7 @@ void read_f (int address ) {
 // the address. When a page fault occurs, “A Page Fault Has Occurred\n” is printed on the screen.
 void write_f (int address, int data){
     //every time write is called, update clock to be the address most recently accessed
-    clock = p_table[address/8].page_num;
+    p_table[address/8].time_stamp = clock;  
     if (p_table[address/8].valid_bit == 0){
         printf("A Page Fault Has Occurred\n");
         int pn = return_page_num(); 
@@ -132,12 +161,16 @@ void write_f (int address, int data){
         for (i = 0; i < 8; i++){
             main_memory[(pn*8)+i].data = virtual_memory[((address/8)*8) + i].data;
         }
+        //printf("pn: %i\n", pn); 
     }
     else{
+        
         int pn = p_table[address/8].page_num; 
         virtual_memory[address].data = data; 
         main_memory[(pn*8)+(address%8)].data = data; 
+        //printf("pn: %i\n", pn); 
     }
+    clock ++; 
 }
 
 // showmain <ppn>: This command prints the contents of a physical page in the main memory. The
@@ -170,6 +203,9 @@ void loop() {
         else if (strcmp(args[0], "read") == 0){
             read_f(atoi(args[1]));
         }
+        else if (strcmp(args[0], "write") == 0){
+            write_f(atoi(args[1]), atoi(args[2]));
+        }
         else if (strcmp(args[0], "showmain") == 0){
             showmain(atoi(args[1]));
         }
@@ -179,7 +215,6 @@ void loop() {
 
 
 int main(int argc, char** argv) {
-    printf("TODO: \n - return_page_num function which handles lru and fifo \n - handling changing the ptable when page is no longer in main memory\n");
     if (argv[1] == NULL || strcmp (argv[1], "FIFO") == 0)
         fifo = 1;
     else if (strcmp (argv[1], "LRU") == 0)
